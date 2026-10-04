@@ -87,7 +87,20 @@ const orderSchema = new mongoose.Schema(
       enum: ["pending", "paid", "failed"],
       default: "pending",
     },
+    razorpayOrderId: {
+      type: String,
+      default: null,
+    },
 
+    razorpayPaymentId: {
+      type: String,
+      default: null,
+    },
+
+    razorpaySignature: {
+      type: String,
+      default: null,
+    },
     orderStatus: {
       type: String,
       enum: ["received", "in_kitchen", "sent_to_delivery"],

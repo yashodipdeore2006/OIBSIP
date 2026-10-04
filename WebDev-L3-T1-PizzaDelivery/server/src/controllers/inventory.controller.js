@@ -104,6 +104,13 @@ export const updateIngredient = async (req, res) => {
       ingredient.stock = stock;
     }
 
+    if (
+      stock !== undefined &&
+      stock > ingredient.lowStockThreshold
+    ) {
+      ingredient.lowStockAlertSent = false;
+    }
+
     if (lowStockThreshold !== undefined) {
       ingredient.lowStockThreshold =
         lowStockThreshold;

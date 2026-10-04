@@ -106,3 +106,73 @@ export const sendPasswordResetEmail = async ({
     `,
   });
 };
+
+
+export const sendLowStockEmail = async (
+  ingredients
+) => {
+  try {
+    const adminEmail = process.env.SMTP_USER;
+
+    const ingredientRows = ingredients
+      .map(
+        (ingredient) => `
+          <tr>
+            <td>${ingredient.name}</td>
+            <td>${ingredient.category}</td>
+            <td>${ingredient.stock}</td>
+            <td>${ingredient.lowStockThreshold}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_FROM,
+      to: adminEmail,
+      subject: "Pizza Delivery - Low Stock Alert",
+
+      html: `
+        <h2>Low Stock Alert</h2>
+
+        <p>
+          The following ingredients are running low:
+        </p>
+
+        <table
+          border="1"
+          cellpadding="8"
+          cellspacing="0"
+        >
+          <thead>
+            <tr>
+              <th>Ingredient</th>
+              <th>Category</th>
+              <th>Current Stock</th>
+              <th>Threshold</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${ingredientRows}
+          </tbody>
+        </table>
+
+        <p>
+          Please update the inventory.
+        </p>
+      `,
+    });
+
+    console.log(
+      "Low-stock email sent successfully."
+    );
+  } catch (error) {
+    console.error(
+      "Low-stock email error:",
+      error
+    );
+
+    throw error;
+  }
+};
