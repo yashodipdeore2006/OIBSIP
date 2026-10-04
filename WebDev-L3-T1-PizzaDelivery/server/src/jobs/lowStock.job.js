@@ -5,64 +5,70 @@ import {
   sendLowStockEmail,
 } from "../services/email.service.js";
 
-export const startLowStockJob = () => {
-  // Run every 30 minutes
-  cron.schedule("*/30 * * * *", async () => {
-    try {
-      console.log(
-        "Running low-stock inventory check..."
-      );
+export const runLowStockCheck = async () => {
+  console.log("Running low-stock inventory check...");
 
-      const lowStockIngredients =
-        await Ingredient.find({
-          $expr: {
-            $and: [
-              {
-                $lte: [
-                  "$stock",
-                  "$lowStockThreshold",
-                ],
-              },
-              {
-                $eq: [
-                  "$lowStockAlertSent",
-                  false,
-                ],
-              },
-            ],
-          },
-        });
-
-      if (lowStockIngredients.length === 0) {
-        console.log(
-          "No new low-stock ingredients."
-        );
-
-        return;
-      }
-
-      await sendLowStockEmail(
-        lowStockIngredients
-      );
-
-      await Ingredient.updateMany(
+  const lowStockIngredients = await Ingredient.find({
+    $expr: {
+      $and: [
         {
-          _id: {
-            $in: lowStockIngredients.map(
-              (ingredient) => ingredient._id
-            ),
-          },
+          $lte: [
+            "$stock",
+            "$lowStockThreshold",
+          ],
         },
         {
-          $set: {
-            lowStockAlertSent: true,
-          },
-        }
-      );
+          $eq: [
+            "$lowStockAlertSent",
+            false,
+          ],
+        },
+      ],
+    },
+  });
 
-      console.log(
-        `Low-stock alert sent for ${lowStockIngredients.length} ingredient(s).`
-      );
+  if (lowStockIngredients.length === 0) {
+    console.log("No new low-stock ingredients.");
+
+    return {
+      checked: true,
+      alerted: 0,
+    };
+  }
+
+  await sendLowStockEmail(
+    lowStockIngredients
+  );
+
+  await Ingredient.updateMany(
+    {
+      _id: {
+        $in: lowStockIngredients.map(
+          (ingredient) => ingredient._id
+        ),
+      },
+    },
+    {
+      $set: {
+        lowStockAlertSent: true,
+      },
+    }
+  );
+
+  console.log(
+    `Low-stock alert sent for ${lowStockIngredients.length} ingredient(s).`
+  );
+
+  return {
+    checked: true,
+    alerted: lowStockIngredients.length,
+  };
+};
+
+export const startLowStockJob = () => {
+  cron.schedule("*/30 * * * *", async () => {
+    try {
+      await runLowStockCheck();
     } catch (error) {
       console.error(
         "Low-stock job error:",
