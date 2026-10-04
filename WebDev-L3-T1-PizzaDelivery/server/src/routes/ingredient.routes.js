@@ -1,20 +1,12 @@
 import express from "express";
-
 import {
-  createIngredient,
-  getInventory,
-  updateIngredient,
-  deleteIngredient,
-} from "../controllers/inventory.controller.js";
+  getIngredients,
+  getIngredientsByCategory,
+} from "../controllers/ingredient.controller.js";
 
 const router = express.Router();
 
-router.get("/", getInventory);
-
-router.post("/", createIngredient);
-
-router.patch("/:id", updateIngredient);
-
-router.delete("/:id", deleteIngredient);
+router.get("/", getIngredients);
+router.get("/:category", getIngredientsByCategory);
 
 export default router;

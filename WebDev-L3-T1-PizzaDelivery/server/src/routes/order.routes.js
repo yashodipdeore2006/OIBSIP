@@ -2,45 +2,29 @@ import express from "express";
 
 import {
   createOrder,
-  getMyOrders,
   getAllOrders,
+  getMyOrders,
   updateOrderStatus,
 } from "../controllers/order.controller.js";
-
+import { authenticateUser } from "../middleware/auth.middleware.js";
+import { authorizeAdmin } from "../middleware/admin.middleware.js";
 import {
-  authenticateUser,
-} from "../middleware/auth.middleware.js";
-
-import {
-  authorizeAdmin,
-} from "../middleware/admin.middleware.js";
+  validateBody,
+  validateObjectIdParam,
+  validators,
+} from "../middleware/validate.middleware.js";
 
 const router = express.Router();
 
-/*
-  USER ROUTES
-*/
-
-// Create order
 router.post(
   "/",
   authenticateUser,
+  validateBody(validators.createOrder),
   createOrder
 );
 
-// Get logged-in user's orders
-router.get(
-  "/my-orders",
-  authenticateUser,
-  getMyOrders
-);
+router.get("/my-orders", authenticateUser, getMyOrders);
 
-
-/*
-  ADMIN ROUTES
-*/
-
-// Get all orders
 router.get(
   "/admin",
   authenticateUser,
@@ -48,11 +32,12 @@ router.get(
   getAllOrders
 );
 
-// Update order status
 router.patch(
   "/admin/:id/status",
   authenticateUser,
   authorizeAdmin,
+  validateObjectIdParam("id"),
+  validateBody(validators.orderStatus),
   updateOrderStatus
 );
 

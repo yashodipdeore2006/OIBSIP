@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import api from "../../services/api";
@@ -9,7 +9,15 @@ function VerifyEmail() {
   const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("");
 
+  const verificationStarted = useRef(false);
+
   useEffect(() => {
+    if (verificationStarted.current) {
+      return;
+    }
+
+    verificationStarted.current = true;
+
     const verifyEmail = async () => {
       const token = searchParams.get("token");
 
@@ -57,18 +65,14 @@ function VerifyEmail() {
       <h1>Email Verification</h1>
 
       {status === "loading" && (
-        <p>
-          Verifying your email...
-        </p>
+        <p>Verifying your email...</p>
       )}
 
       {status === "success" && (
         <div>
-          <h2>Email Verified Successfully</h2>
+          <h2>Email Verified Successfully ✅</h2>
 
-          <p>
-            {message}
-          </p>
+          <p>{message}</p>
 
           <Link to="/login">
             Go to Login
@@ -80,9 +84,7 @@ function VerifyEmail() {
         <div>
           <h2>Verification Failed</h2>
 
-          <p>
-            {message}
-          </p>
+          <p>{message}</p>
 
           <Link to="/register">
             Back to Registration

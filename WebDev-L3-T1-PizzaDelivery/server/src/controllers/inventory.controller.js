@@ -1,33 +1,22 @@
 import Ingredient from "../models/Ingredient.js";
 
-export const createIngredient = async (req, res) => {
+export const createIngredient = async (req, res, next) => {
   try {
     const {
       name,
       category,
       price,
       stock,
-      lowStockThreshold,
+      lowStockThreshold = 10,
     } = req.body;
 
-    if (
-      !name ||
-      !category ||
-      price === undefined ||
-      stock === undefined
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Required fields are missing",
-      });
-    }
-
     const ingredient = await Ingredient.create({
-      name,
+      name: name.trim(),
       category,
       price,
       stock,
       lowStockThreshold,
+      lowStockAlertSent: stock <= lowStockThreshold ? false : false,
     });
 
     res.status(201).json({
@@ -36,17 +25,11 @@ export const createIngredient = async (req, res) => {
       ingredient,
     });
   } catch (error) {
-    console.error("Create ingredient error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    next(error);
   }
 };
 
-
-export const getInventory = async (req, res) => {
+export const getInventory = async (req, res, next) => {
   try {
     const ingredients = await Ingredient.find()
       .sort({ category: 1, name: 1 });
@@ -56,22 +39,14 @@ export const getInventory = async (req, res) => {
       ingredients,
     });
   } catch (error) {
-    console.error("Get inventory error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    next(error);
   }
 };
 
-
-export const updateIngredient = async (req, res) => {
+export const updateIngredient = async (req, res, next) => {
   try {
     const { id } = req.params;
-
-    const ingredient =
-      await Ingredient.findById(id);
+    const ingredient = await Ingredient.findById(id);
 
     if (!ingredient) {
       return res.status(404).json({
@@ -88,32 +63,23 @@ export const updateIngredient = async (req, res) => {
       lowStockThreshold,
     } = req.body;
 
-    if (name !== undefined) {
-      ingredient.name = name;
-    }
+    const previousStock = ingredient.stock;
+    const previousThreshold = ingredient.lowStockThreshold;
 
-    if (category !== undefined) {
-      ingredient.category = category;
-    }
-
-    if (price !== undefined) {
-      ingredient.price = price;
-    }
-
-    if (stock !== undefined) {
-      ingredient.stock = stock;
-    }
-
-    if (
-      stock !== undefined &&
-      stock > ingredient.lowStockThreshold
-    ) {
-      ingredient.lowStockAlertSent = false;
-    }
-
+    if (name !== undefined) ingredient.name = name.trim();
+    if (category !== undefined) ingredient.category = category;
+    if (price !== undefined) ingredient.price = price;
+    if (stock !== undefined) ingredient.stock = stock;
     if (lowStockThreshold !== undefined) {
-      ingredient.lowStockThreshold =
-        lowStockThreshold;
+      ingredient.lowStockThreshold = lowStockThreshold;
+    }
+
+    const stockMovedAboveThreshold =
+      ingredient.stock > ingredient.lowStockThreshold &&
+      (previousStock <= previousThreshold || previousStock <= ingredient.lowStockThreshold);
+
+    if (stockMovedAboveThreshold) {
+      ingredient.lowStockAlertSent = false;
     }
 
     await ingredient.save();
@@ -124,25 +90,13 @@ export const updateIngredient = async (req, res) => {
       ingredient,
     });
   } catch (error) {
-    console.error(
-      "Update ingredient error:",
-      error
-    );
-
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    next(error);
   }
 };
 
-
-export const deleteIngredient = async (req, res) => {
+export const deleteIngredient = async (req, res, next) => {
   try {
-    const { id } = req.params;
-
-    const ingredient =
-      await Ingredient.findByIdAndDelete(id);
+    const ingredient = await Ingredient.findByIdAndDelete(req.params.id);
 
     if (!ingredient) {
       return res.status(404).json({
@@ -156,11 +110,6 @@ export const deleteIngredient = async (req, res) => {
       message: "Ingredient deleted successfully",
     });
   } catch (error) {
-    console.error("Delete ingredient error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    next(error);
   }
 };

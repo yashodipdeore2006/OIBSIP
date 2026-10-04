@@ -1,7 +1,7 @@
-import Order from "../models/Order.js";
 import Ingredient from "../models/Ingredient.js";
+import Order from "../models/Order.js";
 
-export const getAdminDashboardStats = async (req, res) => {
+export const getAdminDashboardStats = async (req, res, next) => {
   try {
     const [
       totalOrders,
@@ -9,51 +9,27 @@ export const getAdminDashboardStats = async (req, res) => {
       pendingPayments,
       totalIngredients,
       lowStockIngredients,
+      revenueResult,
     ] = await Promise.all([
       Order.countDocuments(),
-
-      Order.countDocuments({
-        paymentStatus: "paid",
-      }),
-
-      Order.countDocuments({
-        paymentStatus: "pending",
-      }),
-
+      Order.countDocuments({ paymentStatus: "paid" }),
+      Order.countDocuments({ paymentStatus: "pending" }),
       Ingredient.countDocuments(),
-
       Ingredient.countDocuments({
-        $expr: {
-          $lte: [
-            "$stock",
-            "$lowStockThreshold",
-          ],
-        },
+        $expr: { $lte: ["$stock", "$lowStockThreshold"] },
       }),
-    ]);
-
-    const revenueResult = await Order.aggregate([
-      {
-        $match: {
-          paymentStatus: "paid",
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: {
-            $sum: "$totalAmount",
+      Order.aggregate([
+        { $match: { paymentStatus: "paid" } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$totalAmount" },
           },
         },
-      },
+      ]),
     ]);
 
-    const totalRevenue =
-      revenueResult.length > 0
-        ? revenueResult[0].totalRevenue
-        : 0;
-
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       stats: {
         totalOrders,
@@ -61,18 +37,10 @@ export const getAdminDashboardStats = async (req, res) => {
         pendingPayments,
         totalIngredients,
         lowStockIngredients,
-        totalRevenue,
+        totalRevenue: revenueResult[0]?.total || 0,
       },
     });
   } catch (error) {
-    console.error(
-      "Get admin dashboard stats error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch dashboard statistics",
-    });
+    next(error);
   }
 };

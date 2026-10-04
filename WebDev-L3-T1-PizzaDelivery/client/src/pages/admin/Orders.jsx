@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-
 import api from "../../services/api";
+
+const statuses = [
+  ["received", "Order Received"],
+  ["in_kitchen", "In Kitchen"],
+  ["sent_to_delivery", "Sent to Delivery"],
+];
 
 function Orders() {
   const [orders, setOrders] = useState([]);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -15,17 +18,10 @@ function Orders() {
     try {
       setLoading(true);
       setError("");
-
       const response = await api.get("/orders/admin");
-
       setOrders(response.data.orders || []);
     } catch (error) {
-      console.error("Fetch admin orders error:", error);
-
-      setError(
-        error.response?.data?.message ||
-        "Failed to load orders."
-      );
+      setError(error.response?.data?.message || "Failed to load orders.");
     } finally {
       setLoading(false);
     }
@@ -35,344 +31,145 @@ function Orders() {
     fetchOrders();
   }, []);
 
-  const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
-      const matchesPayment =
-        paymentFilter === "all" ||
-        order.paymentStatus === paymentFilter;
+  const filteredOrders = useMemo(
+    () => orders.filter((order) =>
+      (paymentFilter === "all" || order.paymentStatus === paymentFilter) &&
+      (statusFilter === "all" || order.orderStatus === statusFilter)
+    ),
+    [orders, paymentFilter, statusFilter]
+  );
 
-      const matchesStatus =
-        statusFilter === "all" ||
-        order.orderStatus === statusFilter;
+  const advanceStatus = async (order) => {
+    const index = statuses.findIndex(([value]) => value === order.orderStatus);
+    const next = statuses[index + 1]?.[0];
+    if (!next || order.paymentStatus !== "paid") return;
 
-      return matchesPayment && matchesStatus;
-    });
-  }, [orders, paymentFilter, statusFilter]);
-
-  const updateOrderStatus = async (
-    orderId,
-    newStatus
-  ) => {
     try {
-      const response = await api.patch(
-        `/orders/admin/${orderId}/status`,
-        {
-          orderStatus: newStatus,
-        }
-      );
-
-      const updatedOrder = response.data.order;
-
-      setOrders((currentOrders) =>
-        currentOrders.map((order) =>
-          order._id === updatedOrder._id
-            ? updatedOrder
-            : order
-        )
+      const response = await api.patch(`/orders/admin/${order._id}/status`, {
+        orderStatus: next,
+      });
+      setOrders((current) =>
+        current.map((item) => item._id === order._id ? response.data.order : item)
       );
     } catch (error) {
-      console.error(
-        "Update order status error:",
-        error
-      );
-
-      alert(
-        error.response?.data?.message ||
-        "Failed to update order status."
-      );
+      setError(error.response?.data?.message || "Could not update order status.");
     }
   };
 
-  if (loading) {
-    return (
-      <div>
-        <h1>Orders</h1>
-        <p>Loading orders...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div>
-        <h1>Orders</h1>
-
-        <p>{error}</p>
-
-        <button onClick={fetchOrders}>
-          Try Again
-        </button>
-      </div>
-    );
-  }
+  if (loading) return <div className="screen-state">Loading orders…</div>;
 
   return (
-    <div>
-      <h1>Orders</h1>
-
-      {/* Filters */}
-
-      <div
-        style={{
-          display: "flex",
-          gap: "20px",
-          marginBottom: "25px",
-          flexWrap: "wrap",
-        }}
-      >
+    <section className="admin-page">
+      <div className="page-heading">
         <div>
-          <label>
-            <strong>Payment:</strong>{" "}
-          </label>
-
-          <select
-            value={paymentFilter}
-            onChange={(event) =>
-              setPaymentFilter(event.target.value)
-            }
-          >
-            <option value="all">All Payments</option>
-            <option value="pending">Pending</option>
-            <option value="paid">Paid</option>
-            <option value="failed">Failed</option>
-          </select>
+          <span className="eyebrow">FULFILMENT</span>
+          <h1>Orders</h1>
+          <p>Review payments and move paid orders through the fulfilment pipeline.</p>
         </div>
+        <button className="button button-outline" onClick={fetchOrders}>Refresh</button>
+      </div>
 
-        <div>
-          <label>
-            <strong>Order Status:</strong>{" "}
-          </label>
+      {error && <div className="alert alert-error">{error}</div>}
 
-          <select
-            value={statusFilter}
-            onChange={(event) =>
-              setStatusFilter(event.target.value)
-            }
-          >
-            <option value="all">All Statuses</option>
-            <option value="received">
-              Order Received
-            </option>
-            <option value="in_kitchen">
-              In Kitchen
-            </option>
-            <option value="sent_to_delivery">
-              Sent to Delivery
-            </option>
-          </select>
-        </div>
-
-        <button
-          onClick={() => {
-            setPaymentFilter("all");
-            setStatusFilter("all");
-          }}
-        >
-          Clear Filters
+      <div className="toolbar">
+        <select className="field" value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)}>
+          <option value="all">All payments</option>
+          <option value="pending">Pending</option>
+          <option value="paid">Paid</option>
+          <option value="failed">Failed</option>
+          <option value="refund_required">Refund required</option>
+        </select>
+        <select className="field" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="all">All order statuses</option>
+          <option value="received">Order received</option>
+          <option value="in_kitchen">In kitchen</option>
+          <option value="sent_to_delivery">Sent to delivery</option>
+        </select>
+        <button className="button button-outline" onClick={() => { setPaymentFilter("all"); setStatusFilter("all"); }}>
+          Clear filters
         </button>
       </div>
 
-      <p>
-        Showing{" "}
-        <strong>{filteredOrders.length}</strong>{" "}
-        of <strong>{orders.length}</strong> orders
-      </p>
+      <div className="orders-list">
+        {filteredOrders.map((order) => {
+          const nextIndex = statuses.findIndex(([value]) => value === order.orderStatus) + 1;
+          const nextStatus = statuses[nextIndex];
+          const isPaid = order.paymentStatus === "paid";
 
-      {/* Orders */}
+          return (
+            <article className="order-card" key={order._id}>
+              <div className="order-card-header">
+                <div>
+                  <span className="eyebrow">ORDER #{order._id.slice(-8).toUpperCase()}</span>
+                  <h2>{order.user?.name || "Unknown customer"}</h2>
+                  <p>{order.user?.email || "No email"}</p>
+                </div>
+                <div className="order-pills">
+                  <span className={`status-pill status-${order.paymentStatus === "paid" ? "success" : order.paymentStatus === "refund_required" ? "danger" : "warning"}`}>
+                    {formatPaymentStatus(order.paymentStatus)}
+                  </span>
+                  <span className="status-pill status-neutral">{formatOrderStatus(order.orderStatus)}</span>
+                </div>
+              </div>
 
-      {filteredOrders.length === 0 ? (
-        <div>
-          <p>No orders match the selected filters.</p>
-        </div>
-      ) : (
-        <div>
-          {filteredOrders.map((order) => (
-            <OrderCard
-              key={order._id}
-              order={order}
-              onStatusChange={updateOrderStatus}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+              <div className="order-grid">
+                <div>
+                  <h3>Pizza</h3>
+                  <p><strong>Base:</strong> {order.pizza?.base?.name}</p>
+                  <p><strong>Sauce:</strong> {order.pizza?.sauce?.name}</p>
+                  <p><strong>Cheese:</strong> {order.pizza?.cheese?.name}</p>
+                  <p><strong>Vegetables:</strong> {order.pizza?.vegetables?.map((item) => item.name).join(", ") || "None"}</p>
+                </div>
+                <div>
+                  <h3>Payment</h3>
+                  <p className="order-total">₹{Number(order.totalAmount || 0).toFixed(2)}</p>
+                  {order.razorpayPaymentId && <p className="muted">Payment ID: {order.razorpayPaymentId}</p>}
+                  {order.paymentFailureReason && <div className="alert alert-error compact">{order.paymentFailureReason}</div>}
+                </div>
+              </div>
 
-function OrderCard({
-  order,
-  onStatusChange,
-}) {
-  const isPaid =
-    order.paymentStatus === "paid";
+              <div className="order-footer">
+                <div className="progress-steps">
+                  {statuses.map(([value, label], index) => {
+                    const current = statuses.findIndex(([status]) => status === order.orderStatus);
+                    return <span className={index <= current ? "done" : ""} key={value}>{index + 1}. {label}</span>;
+                  })}
+                </div>
+                {nextStatus && isPaid ? (
+                  <button className="button button-primary" onClick={() => advanceStatus(order)}>
+                    Move to {nextStatus[1]}
+                  </button>
+                ) : !isPaid ? (
+                  <span className="muted">Complete payment before fulfilment.</span>
+                ) : (
+                  <span className="muted">Fulfilment complete.</span>
+                )}
+              </div>
+            </article>
+          );
+        })}
 
-  const canChangeStatus =
-    isPaid &&
-    order.orderStatus !== "sent_to_delivery";
-
-  return (
-    <div
-      style={{
-        border: "1px solid #ddd",
-        padding: "20px",
-        marginBottom: "20px",
-        borderRadius: "8px",
-      }}
-    >
-      <h2>
-        Order #{order._id.slice(-6)}
-      </h2>
-
-      {/* Customer */}
-
-      <h3>Customer</h3>
-
-      <p>
-        <strong>Name:</strong>{" "}
-        {order.user?.name || "Unknown"}
-      </p>
-
-      <p>
-        <strong>Email:</strong>{" "}
-        {order.user?.email || "Unknown"}
-      </p>
-
-      <hr />
-
-      {/* Pizza */}
-
-      <h3>Pizza</h3>
-
-      <p>
-        <strong>Base:</strong>{" "}
-        {order.pizza?.base?.name}
-      </p>
-
-      <p>
-        <strong>Sauce:</strong>{" "}
-        {order.pizza?.sauce?.name}
-      </p>
-
-      <p>
-        <strong>Cheese:</strong>{" "}
-        {order.pizza?.cheese?.name}
-      </p>
-
-      {order.pizza?.vegetables?.length > 0 && (
-        <div>
-          <strong>Vegetables:</strong>
-
-          <ul>
-            {order.pizza.vegetables.map(
-              (vegetable) => (
-                <li key={vegetable.ingredientId}>
-                  {vegetable.name}
-                </li>
-              )
-            )}
-          </ul>
-        </div>
-      )}
-
-      <hr />
-
-      {/* Payment */}
-
-      <h3>Payment</h3>
-
-      <p>
-        <strong>Amount:</strong>{" "}
-        ₹{Number(order.totalAmount || 0).toFixed(2)}
-      </p>
-
-      <p>
-        <strong>Status:</strong>{" "}
-        <span>
-          {formatPaymentStatus(
-            order.paymentStatus
-          )}
-        </span>
-      </p>
-
-      {order.razorpayPaymentId && (
-        <p>
-          <strong>Payment ID:</strong>{" "}
-          {order.razorpayPaymentId}
-        </p>
-      )}
-
-      <hr />
-
-      {/* Order Status */}
-
-      <h3>Order Status</h3>
-
-      <p>
-        <strong>Current:</strong>{" "}
-        {formatOrderStatus(order.orderStatus)}
-      </p>
-
-      <select
-        value={order.orderStatus}
-        disabled={!canChangeStatus}
-        onChange={(event) =>
-          onStatusChange(
-            order._id,
-            event.target.value
-          )
-        }
-      >
-        <option value="received">
-          Order Received
-        </option>
-
-        <option value="in_kitchen">
-          In Kitchen
-        </option>
-
-        <option value="sent_to_delivery">
-          Sent to Delivery
-        </option>
-      </select>
-
-      {!isPaid && (
-        <p>
-          <strong>
-            Payment is not completed.
-          </strong>{" "}
-          This order cannot move to the kitchen.
-        </p>
-      )}
-
-      {order.orderStatus ===
-        "sent_to_delivery" && (
-          <p>
-            This order has completed all available
-            status steps.
-          </p>
-        )}
-    </div>
+        {filteredOrders.length === 0 && <div className="empty-state">No orders match the selected filters.</div>}
+      </div>
+    </section>
   );
 }
 
 function formatPaymentStatus(status) {
-  const labels = {
-    pending: "Pending",
+  return {
+    pending: "Pending payment",
     paid: "Paid",
-    failed: "Failed",
-  };
-
-  return labels[status] || "Unknown";
+    failed: "Payment failed",
+    refund_required: "Refund required",
+  }[status] || "Unknown payment";
 }
 
 function formatOrderStatus(status) {
-  const labels = {
-    received: "Order Received",
-    in_kitchen: "In Kitchen",
-    sent_to_delivery: "Sent to Delivery",
-  };
-
-  return labels[status] || "Unknown";
+  return {
+    received: "Order received",
+    in_kitchen: "In kitchen",
+    sent_to_delivery: "Sent to delivery",
+  }[status] || "Unknown status";
 }
 
 export default Orders;

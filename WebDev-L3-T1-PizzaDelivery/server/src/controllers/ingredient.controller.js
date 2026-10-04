@@ -1,8 +1,16 @@
 import Ingredient from "../models/Ingredient.js";
 
-export const getIngredients = async (req, res) => {
+const allowedCategories = [
+  "base",
+  "sauce",
+  "cheese",
+  "vegetable",
+];
+
+export const getIngredients = async (req, res, next) => {
   try {
     const ingredients = await Ingredient.find()
+      .select("name category price stock")
       .sort({ category: 1, name: 1 });
 
     res.status(200).json({
@@ -10,24 +18,24 @@ export const getIngredients = async (req, res) => {
       ingredients,
     });
   } catch (error) {
-    console.error("Get ingredients error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    next(error);
   }
 };
 
-
-
-export const getIngredientsByCategory = async (req, res) => {
+export const getIngredientsByCategory = async (req, res, next) => {
   try {
     const { category } = req.params;
 
-    const ingredients = await Ingredient.find({
-      category,
-    }).sort({ name: 1 });
+    if (!allowedCategories.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ingredient category.",
+      });
+    }
+
+    const ingredients = await Ingredient.find({ category })
+      .select("name category price stock")
+      .sort({ name: 1 });
 
     res.status(200).json({
       success: true,
@@ -35,14 +43,6 @@ export const getIngredientsByCategory = async (req, res) => {
       ingredients,
     });
   } catch (error) {
-    console.error(
-      "Get ingredients by category error:",
-      error
-    );
-
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    next(error);
   }
 };

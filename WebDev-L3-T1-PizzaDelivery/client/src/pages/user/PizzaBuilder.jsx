@@ -1,572 +1,220 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../../services/api";
+import { startPayment } from "../../services/razorpay";
+import { useAuth } from "../../context/AuthContext";
+
+const steps = ["Base", "Sauce", "Cheese", "Vegetables", "Review"];
 
 function PizzaBuilder() {
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
-
-  const [ingredients, setIngredients] = useState({
-    base: [],
-    sauce: [],
-    cheese: [],
-    vegetable: [],
-  });
-
-  const [pizza, setPizza] = useState({
-    base: null,
-    sauce: null,
-    cheese: null,
-    vegetables: [],
-  });
-
+  const [ingredients, setIngredients] = useState({ base: [], sauce: [], cheese: [], vegetable: [] });
+  const [pizza, setPizza] = useState({ base: null, sauce: null, cheese: null, vegetables: [] });
   const [loading, setLoading] = useState(true);
-  const [paymentProcessing, setPaymentProcessing] =
-    useState(false);
-
-  const [paymentError, setPaymentError] =
-    useState("");
-
-  const [paymentSuccess, setPaymentSuccess] =
-    useState(false);
   const [ordering, setOrdering] = useState(false);
-  const [orderSuccess, setOrderSuccess] = useState(null);
-  const [orderError, setOrderError] = useState("");
+  const [pendingOrderId, setPendingOrderId] = useState(null);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchIngredients();
+    api.get("/ingredients")
+      .then((response) => {
+        const data = response.data.ingredients || [];
+        setIngredients({
+          base: data.filter((item) => item.category === "base"),
+          sauce: data.filter((item) => item.category === "sauce"),
+          cheese: data.filter((item) => item.category === "cheese"),
+          vegetable: data.filter((item) => item.category === "vegetable"),
+        });
+      })
+      .catch((err) => setError(err.response?.data?.message || "Could not load ingredients."))
+      .finally(() => setLoading(false));
   }, []);
 
-  const fetchIngredients = async () => {
-    try {
-      const response = await api.get("/ingredients");
+  const total = useMemo(() => [pizza.base, pizza.sauce, pizza.cheese, ...pizza.vegetables]
+    .filter(Boolean)
+    .reduce((sum, item) => sum + Number(item.price || 0), 0), [pizza]);
 
-      const data = response.data.ingredients;
+  const choose = (key, value) => setPizza((current) => ({ ...current, [key]: value }));
 
-      setIngredients({
-        base: data.filter((item) => item.category === "base"),
-        sauce: data.filter((item) => item.category === "sauce"),
-        cheese: data.filter((item) => item.category === "cheese"),
-        vegetable: data.filter((item) => item.category === "vegetable"),
-      });
-    } catch (error) {
-      console.error("Failed to load ingredients:", error);
-    } finally {
-      setLoading(false);
-    }
+  const toggleVegetable = (value) => {
+    setPizza((current) => ({
+      ...current,
+      vegetables: current.vegetables.some((item) => item._id === value._id)
+        ? current.vegetables.filter((item) => item._id !== value._id)
+        : [...current.vegetables, value],
+    }));
   };
 
-  const toggleVegetable = (vegetable) => {
-    const alreadySelected = pizza.vegetables.some(
-      (item) => item._id === vegetable._id
-    );
-
-    if (alreadySelected) {
-      setPizza({
-        ...pizza,
-        vegetables: pizza.vegetables.filter(
-          (item) => item._id !== vegetable._id
-        ),
-      });
-    } else {
-      setPizza({
-        ...pizza,
-        vegetables: [...pizza.vegetables, vegetable],
-      });
+  const createInternalOrder = async () => {
+    if (!pizza.base || !pizza.sauce || !pizza.cheese) {
+      setError("Select a base, sauce and cheese before continuing.");
+      return null;
     }
-  };
 
-  const calculateTotal = () => {
-    let total = 0;
-
-    if (pizza.base) total += pizza.base.price;
-    if (pizza.sauce) total += pizza.sauce.price;
-    if (pizza.cheese) total += pizza.cheese.price;
-
-    pizza.vegetables.forEach((vegetable) => {
-      total += vegetable.price;
+    const response = await api.post("/orders", {
+      baseId: pizza.base._id,
+      sauceId: pizza.sauce._id,
+      cheeseId: pizza.cheese._id,
+      vegetableIds: pizza.vegetables.map((item) => item._id),
     });
 
-    return total;
+    return response.data.order;
   };
 
-  const loadRazorpay = () => {
-    return new Promise((resolve) => {
-      const existingScript = document.querySelector(
-        'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
-      );
+  const payOrder = async (orderId) => {
+    await startPayment({
+      orderId,
+      name: user?.name,
+      email: user?.email,
+      onSuccess: async () => {
+        setPendingOrderId(null);
+        setMessage("Payment successful. Your pizza is confirmed.");
+        setError("");
+        setPizza({ base: null, sauce: null, cheese: null, vegetables: [] });
+        setStep(1);
+        setOrdering(false);
+      },
+      onError: (error, cancelled = false) => {
+        setPendingOrderId(orderId);
+        setError(error.message || "Payment could not be completed.");
+        setMessage(cancelled ? "Your order is saved. You can retry payment from this page or My Orders." : "Your order is still pending. You can retry payment.");
+        setOrdering(false);
+      },
+    });
+  };
 
-      if (existingScript) {
-        resolve(true);
+  const placeOrder = async () => {
+    if (ordering) return;
+    setOrdering(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const order = pendingOrderId ? { _id: pendingOrderId } : await createInternalOrder();
+      if (!order) {
+        setOrdering(false);
         return;
       }
-
-      const script = document.createElement("script");
-
-      script.src =
-        "https://checkout.razorpay.com/v1/checkout.js";
-
-      script.onload = () => {
-        resolve(true);
-      };
-
-      script.onerror = () => {
-        resolve(false);
-      };
-
-      document.body.appendChild(script);
-    });
-  };
-
-  const createOrder = async () => {
-    if (!pizza.base) {
-      setError("Please select a base.");
-      return;
-    }
-
-    if (!pizza.sauce) {
-      setError("Please select a sauce.");
-      return;
-    }
-
-    if (!pizza.cheese) {
-      setError("Please select cheese.");
-      return;
-    }
-
-    if (paymentProcessing) {
-      return;
-    }
-
-    setError("");
-    setPaymentError("");
-    setPaymentSuccess(false);
-    setPaymentProcessing(true);
-
-    try {
-      const orderResponse = await api.post(
-        "/orders",
-        {
-          baseId: pizza.base._id,
-          sauceId: pizza.sauce._id,
-          cheeseId: pizza.cheese._id,
-          vegetableIds:
-            pizza.vegetables.map(
-              (vegetable) => vegetable._id
-            ),
-        }
-      );
-
-      const createdOrder =
-        orderResponse.data.order;
-
-      if (!createdOrder?._id) {
-        throw new Error(
-          "Order was created but order ID was not returned."
-        );
-      }
-
-      const paymentOrderResponse =
-        await api.post(
-          "/payments/create-order",
-          {
-            orderId: createdOrder._id,
-          }
-        );
-
-      const payment =
-        paymentOrderResponse.data.payment;
-
-      if (!payment?.razorpayOrderId) {
-        throw new Error(
-          "Razorpay order could not be created."
-        );
-      }
-
-      if (!payment?.keyId) {
-        throw new Error(
-          "Razorpay key was not returned by the server."
-        );
-      }
-
-      const razorpayLoaded =
-        await loadRazorpay();
-
-      if (!razorpayLoaded) {
-        throw new Error(
-          "Razorpay Checkout could not be loaded."
-        );
-      }
-
-      const options = {
-        key: payment.keyId,
-
-        amount: payment.amount,
-
-        currency: payment.currency,
-
-        name: "Pizza Delivery",
-
-        description:
-          "Custom Pizza Order",
-
-        order_id:
-          payment.razorpayOrderId,
-
-        handler: async (response) => {
-          try {
-            setPaymentError("");
-
-            const verificationResponse =
-              await api.post(
-                "/payments/verify",
-                {
-                  orderId:
-                    createdOrder._id,
-
-                  razorpay_order_id:
-                    response.razorpay_order_id,
-
-                  razorpay_payment_id:
-                    response.razorpay_payment_id,
-
-                  razorpay_signature:
-                    response.razorpay_signature,
-                }
-              );
-
-            if (
-              verificationResponse.data
-                ?.success
-            ) {
-              setPaymentSuccess(true);
-
-              alert(
-                "Payment successful and order confirmed!"
-              );
-            } else {
-              throw new Error(
-                "Payment verification was unsuccessful."
-              );
-            }
-          } catch (error) {
-            console.error(
-              "Payment verification error:",
-              error
-            );
-
-            setPaymentError(
-              error.response?.data?.message ||
-              "Payment was received, but verification failed. Please contact support."
-            );
-          } finally {
-            setPaymentProcessing(false);
-          }
-        },
-
-        modal: {
-          ondismiss: () => {
-            setPaymentProcessing(false);
-
-            setPaymentError(
-              "Payment was cancelled. Your order is still pending payment."
-            );
-          },
-        },
-
-        prefill: {
-          name: "",
-          email: "",
-        },
-
-        theme: {
-          color: "#000000",
-        },
-      };
-
-      const razorpay =
-        new window.Razorpay(options);
-
-      razorpay.on(
-        "payment.failed",
-        (response) => {
-          console.error(
-            "Razorpay payment failed:",
-            response
-          );
-
-          setPaymentError(
-            response.error?.description ||
-            "Payment failed. Please try again."
-          );
-
-          setPaymentProcessing(false);
-        }
-      );
-
-      razorpay.open();
-    } catch (error) {
-      console.error(
-        "Create payment/order error:",
-        error
-      );
-
-      setPaymentError(
-        error.response?.data?.message ||
-        error.message ||
-        "Unable to start payment. Please try again."
-      );
-
-      setPaymentProcessing(false);
+      setPendingOrderId(order._id);
+      await payOrder(order._id);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || "Unable to start payment.");
+      setOrdering(false);
     }
   };
 
-  if (loading) {
-    return <p>Loading pizza builder...</p>;
-  }
+  if (loading) return <div className="screen-state">Preparing the pizza builder…</div>;
+
+  const currentItems = step === 1 ? ingredients.base : step === 2 ? ingredients.sauce : step === 3 ? ingredients.cheese : ingredients.vegetable;
 
   return (
-    <div>
-      <h1>Build Your Pizza</h1>
-
-      <p>Step {step} of 5</p>
-
-      {step === 1 && (
+    <section className="customer-page builder-page">
+      <div className="builder-hero">
         <div>
-          <h2>Choose Your Base</h2>
-
-          {ingredients.base.map((item) => (
-            <button
-              key={item._id}
-              onClick={() =>
-                setPizza({
-                  ...pizza,
-                  base: item,
-                })
-              }
-            >
-              {item.name} - ₹{item.price}
-
-              {pizza.base?._id === item._id && (
-                <span> ✓ Selected</span>
-              )}
-            </button>
-          ))}
-
-          <br />
-          <br />
-
-          <button
-            disabled={!pizza.base}
-            onClick={() => setStep(2)}
-          >
-            Next
-          </button>
+          <span className="eyebrow">CUSTOM PIZZA</span>
+          <h1>Build your perfect pizza.</h1>
+          <p>Choose your base, sauce, cheese and toppings. We calculate the price from the live ingredient catalog.</p>
         </div>
-      )}
+        <div className="pizza-hero">🍕</div>
+      </div>
 
-      {step === 2 && (
-        <div>
-          <h2>Choose Your Sauce</h2>
-
-          {ingredients.sauce.map((item) => (
-            <button
-              key={item._id}
-              onClick={() =>
-                setPizza({
-                  ...pizza,
-                  sauce: item,
-                })
-              }
-            >
-              {item.name} - ₹{item.price}
-
-              {pizza.sauce?._id === item._id && (
-                <span> ✓ Selected</span>
-              )}
-            </button>
-          ))}
-
-          <br />
-          <br />
-
-          <button onClick={() => setStep(1)}>
-            Back
+      <div className="stepper">
+        {steps.map((label, index) => (
+          <button key={label} className={step === index + 1 ? "step active" : step > index + 1 ? "step done" : "step"} onClick={() => index + 1 <= step && setStep(index + 1)}>
+            <span>{index + 1}</span>{label}
           </button>
+        ))}
+      </div>
 
-          <button
-            disabled={!pizza.sauce}
-            onClick={() => setStep(3)}
-          >
-            Next
-          </button>
-        </div>
-      )}
+      {message && <div className="alert alert-success">{message}</div>}
+      {error && <div className="alert alert-error">{error}</div>}
 
-      {step === 3 && (
-        <div>
-          <h2>Choose Your Cheese</h2>
-
-          {ingredients.cheese.map((item) => (
-            <button
-              key={item._id}
-              onClick={() =>
-                setPizza({
-                  ...pizza,
-                  cheese: item,
-                })
-              }
-            >
-              {item.name} - ₹{item.price}
-
-              {pizza.cheese?._id === item._id && (
-                <span> ✓ Selected</span>
-              )}
-            </button>
-          ))}
-
-          <br />
-          <br />
-
-          <button onClick={() => setStep(2)}>
-            Back
-          </button>
-
-          <button
-            disabled={!pizza.cheese}
-            onClick={() => setStep(4)}
-          >
-            Next
-          </button>
-        </div>
-      )}
-
-      {step === 4 && (
-        <div>
-          <h2>Choose Vegetables</h2>
-
-          <p>You can select multiple vegetables.</p>
-
-          {ingredients.vegetable.map((item) => {
-            const selected = pizza.vegetables.some(
-              (vegetable) =>
-                vegetable._id === item._id
-            );
-
-            return (
-              <button
-                key={item._id}
-                onClick={() => toggleVegetable(item)}
-              >
-                {item.name} - ₹{item.price}
-
-                {selected && (
-                  <span> ✓ Selected</span>
-                )}
+      {step < 5 ? (
+        <div className="builder-layout">
+          <div className="ingredient-panel">
+            <div className="page-heading compact-heading">
+              <div><span className="eyebrow">STEP {step}</span><h2>Choose your {steps[step - 1].toLowerCase()}</h2></div>
+            </div>
+            <div className="ingredient-grid">
+              {currentItems.map((item) => {
+                const selected = step === 4
+                  ? pizza.vegetables.some((vegetable) => vegetable._id === item._id)
+                  : pizza[steps[step - 1].toLowerCase()]?._id === item._id;
+                const soldOut = item.stock <= 0;
+                return (
+                  <button
+                    className={`ingredient-card${selected ? " selected" : ""}`}
+                    key={item._id}
+                    disabled={soldOut}
+                    onClick={() => step === 4 ? toggleVegetable(item) : choose(steps[step - 1].toLowerCase(), item)}
+                  >
+                    <span className="ingredient-icon">{iconFor(item.category)}</span>
+                    <span className="ingredient-card-name">{item.name}</span>
+                    <span className="ingredient-card-price">₹{item.price}</span>
+                    <span className={soldOut ? "muted" : "stock-copy"}>{soldOut ? "Out of stock" : `${item.stock} available`}</span>
+                    {selected && <span className="selected-check">✓ Selected</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="builder-actions">
+              {step > 1 && <button className="button button-outline" onClick={() => setStep(step - 1)}>Back</button>}
+              <button className="button button-primary" disabled={step === 1 ? !pizza.base : step === 2 ? !pizza.sauce : step === 3 ? !pizza.cheese : false} onClick={() => setStep(step + 1)}>
+                {step === 4 ? "Review pizza" : "Continue"}
               </button>
-            );
-          })}
-
-          <br />
-          <br />
-
-          <button onClick={() => setStep(3)}>
-            Back
-          </button>
-
-          <button onClick={() => setStep(5)}>
-            View Summary
-          </button>
-        </div>
-      )}
-
-      {step === 5 && (
-        <div>
-          <h2>Pizza Summary</h2>
-
-          <p>
-            <strong>Base:</strong>{" "}
-            {pizza.base?.name}
-          </p>
-
-          <p>
-            <strong>Sauce:</strong>{" "}
-            {pizza.sauce?.name}
-          </p>
-
-          <p>
-            <strong>Cheese:</strong>{" "}
-            {pizza.cheese?.name}
-          </p>
-
-          <div>
-            <strong>Vegetables:</strong>
-
-            {pizza.vegetables.length === 0 ? (
-              <p>No vegetables selected</p>
-            ) : (
-              <ul>
-                {pizza.vegetables.map(
-                  (vegetable) => (
-                    <li key={vegetable._id}>
-                      {vegetable.name}
-                    </li>
-                  )
-                )}
-              </ul>
-            )}
+            </div>
           </div>
 
-          <h2>
-            Total: ₹{calculateTotal()}
-          </h2>
-
-          <button onClick={() => setStep(4)}>
-            Back
-          </button>
-
-          <button
-            type="button"
-            onClick={createOrder}
-            disabled={paymentProcessing}
-          >
-            {paymentProcessing
-              ? "Processing Payment..."
-              : "Place Order & Pay"}
-          </button>
-
-          {orderError && (
-            <p style={{ color: "red" }}>
-              {orderError}
-            </p>
-          )}
-
-          {orderSuccess && (
-            <div>
-              <h2>Order Created Successfully 🎉</h2>
-
-              <p>
-                Order ID: {orderSuccess._id}
-              </p>
-
-              <p>
-                Total Amount: ₹
-                {orderSuccess.totalAmount}
-              </p>
-
-              <p>
-                Payment Status:{" "}
-                {orderSuccess.paymentStatus}
-              </p>
-
-              <p>
-                Order Status:{" "}
-                {orderSuccess.orderStatus}
-              </p>
+          <SummaryCard pizza={pizza} total={total} />
+        </div>
+      ) : (
+        <div className="review-layout">
+          <div className="review-card">
+            <span className="eyebrow">FINAL REVIEW</span>
+            <h2>Your pizza is ready.</h2>
+            <div className="review-list">
+              <ReviewRow label="Base" value={pizza.base?.name} price={pizza.base?.price} />
+              <ReviewRow label="Sauce" value={pizza.sauce?.name} price={pizza.sauce?.price} />
+              <ReviewRow label="Cheese" value={pizza.cheese?.name} price={pizza.cheese?.price} />
+              <ReviewRow label="Vegetables" value={pizza.vegetables.map((item) => item.name).join(", ") || "None"} price={pizza.vegetables.reduce((sum, item) => sum + Number(item.price || 0), 0)} />
             </div>
-          )}
+            <div className="review-total"><span>Total</span><strong>₹{total.toFixed(2)}</strong></div>
+            <div className="builder-actions">
+              <button className="button button-outline" disabled={ordering} onClick={() => setStep(4)}>Back</button>
+              <button className="button button-primary" disabled={ordering} onClick={placeOrder}>
+                {ordering ? "Opening secure checkout…" : pendingOrderId ? "Retry payment" : "Place order & pay"}
+              </button>
+            </div>
+            <p className="muted payment-note">You will be redirected to Razorpay's secure checkout. Cancelled or failed payments keep this order available for retry.</p>
+          </div>
+          <SummaryCard pizza={pizza} total={total} />
         </div>
       )}
-    </div>
+    </section>
   );
+}
+
+function SummaryCard({ pizza, total }) {
+  return (
+    <aside className="summary-card">
+      <span className="eyebrow">YOUR PIZZA</span>
+      <div className="summary-pizza">🍕</div>
+      <p><strong>{pizza.base?.name || "Choose a base"}</strong></p>
+      <p>{pizza.sauce?.name || "Choose a sauce"}</p>
+      <p>{pizza.cheese?.name || "Choose cheese"}</p>
+      <p>{pizza.vegetables.length ? pizza.vegetables.map((item) => item.name).join(", ") : "No vegetables"}</p>
+      <div className="summary-total"><span>Total</span><strong>₹{total.toFixed(2)}</strong></div>
+    </aside>
+  );
+}
+
+function ReviewRow({ label, value, price }) {
+  return <div className="review-row"><span>{label}</span><strong>{value || "Not selected"}</strong><span>₹{Number(price || 0).toFixed(2)}</span></div>;
+}
+
+function iconFor(category) {
+  return { base: "🥯", sauce: "🍅", cheese: "🧀", vegetable: "🥬" }[category] || "🍕";
 }
 
 export default PizzaBuilder;

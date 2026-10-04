@@ -1,96 +1,42 @@
-import { Link, useNavigate } from "react-router-dom";
-
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 function Navbar() {
+  const location = useLocation();
   const navigate = useNavigate();
+  const { user, loading, logout } = useAuth();
 
-  const {
-    user,
-    loading,
-    logout,
-  } = useAuth();
+  if (loading || location.pathname.startsWith("/admin")) return null;
 
   const handleLogout = () => {
     logout();
-
-    navigate("/login", {
-      replace: true,
-    });
+    navigate("/login", { replace: true });
   };
 
-  if (loading) {
-    return null;
-  }
-
   return (
-    <nav
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "15px 25px",
-        borderBottom: "1px solid #ddd",
-      }}
-    >
-      <div>
-        <Link
-          to="/pizza-builder"
-          style={{
-            textDecoration: "none",
-            fontWeight: "bold",
-          }}
-        >
-          Pizza Delivery
-        </Link>
-      </div>
+    <header className="site-header">
+      <Link to={user ? "/pizza-builder" : "/login"} className="brand-link">
+        <span className="brand-mark">🍕</span>
+        <span>PizzaCraft</span>
+      </Link>
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "20px",
-        }}
-      >
+      <nav className="site-nav">
         {user ? (
           <>
-            <Link to="/pizza-builder">
-              Pizza Builder
-            </Link>
-
-            <Link to="/my-orders">
-              My Orders
-            </Link>
-
-            {user.role === "admin" && (
-              <Link to="/admin">
-                Admin Dashboard
-              </Link>
-            )}
-
-            <span>
-              {user.name}
-            </span>
-
-            <button
-              onClick={handleLogout}
-            >
-              Logout
-            </button>
+            <Link to="/pizza-builder">Build Pizza</Link>
+            <Link to="/my-orders">My Orders</Link>
+            {user.role === "admin" && <Link to="/admin">Admin</Link>}
+            <span className="user-chip">{user.name}</span>
+            <button className="button button-outline" onClick={handleLogout}>Logout</button>
           </>
         ) : (
           <>
-            <Link to="/login">
-              Login
-            </Link>
-
-            <Link to="/register">
-              Register
-            </Link>
+            <Link to="/login">Login</Link>
+            <Link className="button button-primary" to="/register">Create account</Link>
           </>
         )}
-      </div>
-    </nav>
+      </nav>
+    </header>
   );
 }
 

@@ -2,88 +2,74 @@ import "dotenv/config";
 
 import http from "http";
 import jwt from "jsonwebtoken";
+import { Server } from "socket.io";
 
 import app from "./app.js";
 import connectDB from "./config/database.js";
+import { startLowStockJob } from "./jobs/lowStock.job.js";
+import { startPaymentReconciliationJob } from "./jobs/paymentReconciliation.job.js";
 
-import { Server } from "socket.io";
-import {
-  startLowStockJob,
-} from "./jobs/lowStock.job.js";
-
-
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT || 5000);
+const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/$/, "");
 
 const httpServer = http.createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: clientUrl,
     methods: ["GET", "POST", "PATCH"],
   },
 });
 
-// Socket authentication
 io.use((socket, next) => {
   try {
-    const token =
-      socket.handshake.auth?.token;
+    const token = socket.handshake.auth?.token;
 
     if (!token) {
-      return next(
-        new Error("Authentication required")
-      );
+      return next(new Error("Authentication required"));
     }
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
-
-    socket.user = decoded;
-
+    socket.user = jwt.verify(token, process.env.JWT_SECRET);
     next();
-  } catch (error) {
-    next(
-      new Error(
-        "Invalid or expired authentication token"
-      )
-    );
+  } catch {
+    next(new Error("Invalid or expired authentication token"));
   }
 });
 
 io.on("connection", (socket) => {
-  console.log(
-    `Socket connected: ${socket.id}`
-  );
-
   const userId = socket.user.userId;
-
   socket.join(`user:${userId}`);
+  console.log(`Socket connected: ${socket.id} (user ${userId})`);
 
-  console.log(
-    `User ${userId} joined room`
-  );
-
-  socket.on("disconnect", () => {
-    console.log(
-      `Socket disconnected: ${socket.id}`
-    );
+  socket.on("disconnect", (reason) => {
+    console.log(`Socket disconnected: ${socket.id} (${reason})`);
   });
 });
 
 const startServer = async () => {
   await connectDB();
-
   startLowStockJob();
+  startPaymentReconciliationJob();
 
-  httpServer.listen(PORT, () => {
-    console.log(
-      `Server running on http://localhost:${PORT}`
-    );
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
   });
 };
 
-startServer();
+const shutdown = (signal) => {
+  console.log(`${signal} received. Closing HTTP server...`);
+  httpServer.close(() => {
+    console.log("HTTP server closed.");
+    process.exit(0);
+  });
+};
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
+startServer().catch((error) => {
+  console.error("Failed to start server:", error);
+  process.exit(1);
+});
 
 export { io };
