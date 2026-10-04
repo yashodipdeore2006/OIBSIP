@@ -322,7 +322,7 @@ user
 admin
 ```
 
-A normal account can be created through registration. For local development, the role can then be changed from `user` to `admin` in MongoDB. After changing the role, log out and log back in so a new JWT contains the updated role.
+![1791138176231](image/README/1791138176231.png)![1791138239447](image/README/1791138239447.png)![1791138269774](image/README/1791138269774.png)![1791138286324](image/README/1791138286324.png)![1791138305766](image/README/1791138305766.png)![1791138320871](image/README/1791138320871.png)![1791138362512](image/README/1791138362512.png)![1791138375307](image/README/1791138375307.png)A normal account can be created through registration. For local development, the role can then be changed from `user` to `admin` in MongoDB. After changing the role, log out and log back in so a new JWT contains the updated role.
 
 ## Documentation
 
@@ -369,4 +369,6 @@ THE SOFTWARE.
 
 **Yashodip Deore**
 
-GitHub: [@yashodipdeore2006](https://github.com/yashodipdeore2006)
+GitHub: [@yashodipdeore2006
+
+](https://github.com/yashodipdeore2006)
