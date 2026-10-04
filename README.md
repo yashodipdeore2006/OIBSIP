@@ -1,73 +1,68 @@
-# PizzaCraft — Custom Pizza Delivery & Inventory Platform
+# PizzaCraft — MERN Pizza Delivery & Inventory Platform
 
-PizzaCraft is a production-style MERN application for building custom pizzas, accepting Razorpay payments, managing inventory, and tracking orders in real time.
+PizzaCraft is a production-style full-stack pizza ordering and inventory management application built with the MERN ecosystem. Users can create custom pizzas, complete Razorpay payments, track orders, and manage their account. Administrators can manage ingredients, inventory, and order status.
 
-## Stack
-
-- React 19 + Vite
-- Node.js + Express 5
-- MongoDB + Mongoose
-- JWT authentication
-- Razorpay test payments
-- Socket.IO real-time order tracking
-- Nodemailer email delivery
-- node-cron low-stock and payment reconciliation jobs
-
-## Core features
+## Features
 
 ### Customer
 
-- Registration with email verification
-- Login with JWT authentication
-- Forgot/reset password
-- Five-step custom pizza builder
-- Server-side price calculation
-- Inventory-aware selections
-- Razorpay checkout
-- Reusable pending-order payment retry
+- User registration and email verification
+- JWT-based authentication
+- Login/logout and protected routes
+- Forgot-password and reset-password flow
+- Custom pizza builder
+- Live ingredient availability and pricing
+- Razorpay Test Mode payments
 - Order history
-- Live order status tracking
+- Real-time order-status updates with Socket.IO
 
 ### Admin
 
-- Separate admin console
-- Dashboard metrics
-- Inventory search/filter/update
-- Low-stock visibility
-- Order filtering by payment/order status
-- Payment/failure visibility
-- Controlled order-status transitions
+- Admin-only dashboard
+- Ingredient CRUD
+- Stock management
+- Low-stock thresholds
+- Low-stock email alerts
+- Order listing and filtering
+- Controlled order-status progression
 
-## Architecture
+### Backend reliability and security
 
-```text
-React / Vite
-    │
-    ├── REST API ───────────────┐
-    │                           ▼
-    └── Socket.IO          Express API
-                              │
-                 ┌────────────┼─────────────┐
-                 ▼            ▼             ▼
-             MongoDB       Razorpay     Nodemailer
-                 │            │             │
-                 └──────┬─────┴─────────────┘
-                        ▼
-                 node-cron jobs
-              low-stock / reconciliation
-```
+- Server-side ingredient validation and price calculation
+- Inventory deduction after successful payment settlement
+- Razorpay signature verification
+- Razorpay webhook handling
+- Payment reconciliation fallback
+- Request validation
+- Rate limiting
+- Security headers
+- Centralized error handling
 
-## Project structure
+## Tech Stack
+
+| Layer            | Technology                               |
+| ---------------- | ---------------------------------------- |
+| Frontend         | React, Vite, React Router, Axios         |
+| Backend          | Node.js, Express                         |
+| Database         | MongoDB, Mongoose                        |
+| Authentication   | JWT, bcryptjs                            |
+| Payments         | Razorpay                                 |
+| Email            | Nodemailer + Gmail SMTP                  |
+| Real-time        | Socket.IO                                |
+| Scheduling       | node-cron locally + Vercel Cron fallback |
+| Deployment       | Vercel                                   |
+| Database hosting | MongoDB Atlas                            |
+
+## Project Structure
 
 ```text
 WebDev-L3-T1-PizzaDelivery/
 ├── client/
 │   ├── src/
-│   │   ├── components/
-│   │   ├── context/
-│   │   ├── pages/
-│   │   └── services/
-│   └── package.json
+│   ├── public/
+│   ├── package.json
+│   └── vercel.json
+│
 ├── server/
 │   ├── src/
 │   │   ├── config/
@@ -77,229 +72,301 @@ WebDev-L3-T1-PizzaDelivery/
 │   │   ├── models/
 │   │   ├── routes/
 │   │   ├── services/
-│   │   └── sockets/
-│   └── package.json
+│   │   ├── sockets/
+│   │   ├── app.js
+│   │   ├── index.js
+│   │   └── server.js
+│   ├── package.json
+│   └── vercel.json
+│
+├── docs/
+├── .gitignore
 └── README.md
 ```
 
-## Local setup
+## Architecture
 
-### 1. Clone and enter the project
+```mermaid
+flowchart LR
+    U[Customer / Admin Browser]
+    FE[React + Vite]
+    API[Express API]
+    DB[(MongoDB Atlas)]
+    RP[Razorpay]
+    MAIL[Gmail SMTP]
+    WS[Socket.IO]
+
+    U --> FE
+    FE --> API
+    API --> DB
+    API --> RP
+    API --> MAIL
+    API --> WS
+```
+
+See [docs/architecture.md](docs/architecture.md) for the detailed architecture and request flows.
+
+## Local Setup
+
+### Requirements
+
+- Node.js 22+ recommended
+- npm
+- MongoDB local installation or MongoDB Atlas
+- Razorpay Test Mode account
+- Gmail account with App Password for SMTP
+
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/yashodipdeore2006/OIBSIP.git
 cd OIBSIP/WebDev-L3-T1-PizzaDelivery
 ```
 
-### 2. Backend environment
+### 2. Install backend dependencies
 
 ```bash
 cd server
-copy .env.example .env
+npm install
 ```
 
-On macOS/Linux use `cp .env.example .env`.
+Create `server/.env` from `server/.env.example`.
 
-Set:
+### 3. Install frontend dependencies
+
+```bash
+cd ../client
+npm install
+```
+
+Create `client/.env` from `client/.env.example`.
+
+### 4. Start the backend
+
+```bash
+cd ../server
+npm run dev
+```
+
+The local API runs on:
+
+```text
+http://localhost:5000
+```
+
+Health check:
+
+```text
+http://localhost:5000/api/health
+```
+
+### 5. Start the frontend
+
+In another terminal:
+
+```bash
+cd client
+npm run dev
+```
+
+The Vite app normally runs on:
+
+```text
+http://localhost:5173
+```
+
+## Environment Variables
+
+Never commit real credentials.
+
+### Backend
 
 ```env
 NODE_ENV=development
 PORT=5000
 CLIENT_URL=http://localhost:5173
-MONGO_URI=mongodb://localhost:27017/pizza_delivery
-JWT_SECRET=use_a_long_random_secret
+
+MONGO_URI=mongodb://localhost:27017/PizzaDeliveryApp
+
+JWT_SECRET=replace_me
 JWT_EXPIRES_IN=7d
 
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_SECURE=true
-SMTP_USER=your_email@example.com
-SMTP_PASSWORD=your_app_password
-EMAIL_FROM=Pizza Delivery <your_email@example.com>
+SMTP_USER=
+SMTP_PASSWORD=
+EMAIL_FROM=Pizza Delivery <your-email@example.com>
 
-RAZORPAY_KEY_ID=rzp_test_...
-RAZORPAY_KEY_SECRET=...
-RAZORPAY_WEBHOOK_SECRET=...
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+RAZORPAY_WEBHOOK_SECRET=
+
+CRON_SECRET=
 ```
 
-Then:
-
-```bash
-npm ci
-npm run dev
-```
-
-### 3. Frontend environment
-
-In another terminal:
-
-```bash
-cd ../client
-copy .env.example .env
-npm ci
-npm run dev
-```
-
-Use `cp` instead of `copy` on macOS/Linux.
-
-## Admin access
-
-Register a normal account first. After the account is verified, change its MongoDB `role` field from `user` to `admin` in MongoDB Compass. Log out and log in again so the newly issued JWT contains the admin role.
-
-No admin-creation script is required.
-
-## Payment lifecycle
-
-```text
-Create internal order
-      │
-      ▼
-Create/reuse Razorpay order
-      │
-      ▼
-Open Razorpay Checkout
-      │
-  ┌───┴─────────────┐
-  │                 │
-Success          Cancel/fail
-  │                 │
-  ▼                 ▼
-Verify signature   Keep internal order pending/failed
-  │                 │
-  ▼                 ▼
-Atomic stock       Retry same order
-decrement
-  │
-  ▼
-Mark paid
-```
-
-The server also processes Razorpay webhooks and periodically reconciles recent pending/failed payments with Razorpay. A captured payment that cannot be fulfilled because required stock is unavailable is marked `refund_required` for manual refund handling.
-
-## Razorpay webhook
-
-Configure Razorpay to send payment events to:
-
-```text
-https://YOUR-API-DOMAIN/api/payments/webhook
-```
-
-Use the same value configured as `RAZORPAY_WEBHOOK_SECRET` in the API environment.
-
-Recommended events for this implementation:
-
-- `payment.captured`
-- `payment.failed`
-- `order.paid`
-
-The endpoint validates the raw webhook body with the Razorpay webhook secret.
-
-## API endpoints
-
-### Auth
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| POST | `/api/auth/register` | Register user |
-| POST | `/api/auth/login` | Login |
-| GET | `/api/auth/me` | Current user |
-| GET | `/api/auth/verify-email?token=...` | Verify email |
-| POST | `/api/auth/forgot-password` | Start reset |
-| POST | `/api/auth/reset-password?token=...` | Reset password |
-
-### Ingredients
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/api/ingredients` | List ingredients |
-| GET | `/api/ingredients/:category` | Filter by category |
-
-### Orders
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| POST | `/api/orders` | Create pending order |
-| GET | `/api/orders/my-orders` | Current user's orders |
-| GET | `/api/orders/admin` | Admin order list |
-| PATCH | `/api/orders/admin/:id/status` | Advance order status |
-
-### Payments
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| POST | `/api/payments/create-order` | Create/reuse gateway order |
-| POST | `/api/payments/verify` | Verify checkout signature |
-| POST | `/api/payments/webhook` | Razorpay server webhook |
-
-### Admin
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/api/admin/dashboard` | Dashboard metrics |
-| GET | `/api/admin/inventory` | Inventory |
-| POST | `/api/admin/inventory` | Add ingredient |
-| PATCH | `/api/admin/inventory/:id` | Update ingredient |
-| DELETE | `/api/admin/inventory/:id` | Delete ingredient |
-
-## Production hardening included
-
-- Restricted CORS from `CLIENT_URL`
-- Security response headers
-- HSTS in production
-- Request-body size limit
-- Global rate limiting
-- Stricter auth rate limiting
-- Request validation for IDs and bodies
-- Centralized 404/error handling
-- Disabled `X-Powered-By`
-- Timing-safe payment signature comparison
-- Atomic payment/inventory settlement
-- Idempotent payment settlement
-- Webhook signature verification
-- Payment reconciliation job
-- Graceful server shutdown
-- Environment-based frontend API and Socket.IO URLs
-
-The custom rate limiter is process-local. For a horizontally scaled deployment, replace it with a shared store such as Redis so limits are consistent across instances.
-
-## Deployment with Render
-
-`render.yaml` in the repository root describes:
-
-1. Node web service for the API.
-2. Static site for the React client.
-3. React Router rewrite to `/index.html`.
-4. Health-check configuration.
-5. Secret environment variables supplied through the Render Dashboard rather than committed to Git.
-
-After deployment, set:
+### Frontend
 
 ```env
-CLIENT_URL=https://YOUR-FRONTEND-DOMAIN
-VITE_API_URL=https://YOUR-API-DOMAIN/api
-VITE_SOCKET_URL=https://YOUR-API-DOMAIN
+VITE_API_URL=http://localhost:5000/api
+VITE_SOCKET_URL=http://localhost:5000
 ```
 
-Razorpay should use production HTTPS URLs for a production deployment. Never put `RAZORPAY_KEY_SECRET`, JWT secrets, SMTP passwords or webhook secrets into frontend variables.
+## API Overview
 
-## Verification checklist
+The main route groups are:
 
-- [ ] Register a customer
-- [ ] Verify email
-- [ ] Login
-- [ ] Build a pizza
-- [ ] Create an order
-- [ ] Complete Razorpay test payment
-- [ ] Confirm stock decrement
-- [ ] Confirm order appears in My Orders
-- [ ] Change order status as admin
-- [ ] Confirm Socket.IO live update
-- [ ] Simulate/cancel a payment and retry the same order
-- [ ] Configure and test Razorpay webhook
-- [ ] Confirm low-stock email job
-- [ ] Run `npm run build` for the client before deployment
-- [ ] Confirm `/api/health` after deployment
+```text
+/auth
+/ingredients
+/orders
+/payments
+/admin
+/admin/inventory
+```
+
+See [docs/api.md](docs/api.md) for endpoint details.
+
+## Payment Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as API
+    participant R as Razorpay
+    participant D as MongoDB
+
+    C->>A: Create internal order
+    A->>D: Save pending order
+    C->>A: Create Razorpay order
+    A->>R: Create payment order
+    R-->>C: Checkout
+    C->>A: Payment details + signature
+    A->>A: Verify HMAC signature
+    A->>D: Atomically settle payment + decrement stock
+    A-->>C: Paid order
+    R-->>A: Webhook event
+```
+
+See [docs/payments.md](docs/payments.md).
+
+## Authentication Flow
+
+```text
+Register
+  ↓
+Verification email
+  ↓
+Verify email
+  ↓
+Login
+  ↓
+JWT token
+  ↓
+Protected routes
+  ↓
+Admin role check for admin routes
+```
+
+See [docs/authentication.md](docs/authentication.md).
+
+## Deployment
+
+The current monorepo can be deployed as separate Vercel projects:
+
+```text
+GitHub repository
+├── client → Vercel frontend
+└── server → Vercel backend
+```
+
+Typical production dependencies:
+
+```text
+React/Vite → Vercel
+Express → Vercel
+MongoDB → MongoDB Atlas
+Payments → Razorpay
+Email → Gmail SMTP
+```
+
+See [docs/deployment.md](docs/deployment.md).
+
+## Database
+
+Current core collections:
+
+```text
+users
+ingredients
+orders
+```
+
+See [docs/database.md](docs/database.md).
+
+## Security Notes
+
+- Keep `.env` files out of Git.
+- Store server-side secrets only in backend environment variables.
+- Do not expose `RAZORPAY_KEY_SECRET`, `MONGO_URI`, `JWT_SECRET`, SMTP passwords, webhook secrets, or `CRON_SECRET` in frontend variables.
+- `VITE_*` variables are client-visible by design.
+- Use strong, unique production secrets.
+- Rotate any secret that has been publicly exposed.
+
+## Admin Setup
+
+The application uses the `role` field on the user document:
+
+```text
+user
+admin
+```
+
+A normal account can be created through registration. For local development, the role can then be changed from `user` to `admin` in MongoDB. After changing the role, log out and log back in so a new JWT contains the updated role.
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [API](docs/api.md)
+- [Database](docs/database.md)
+- [Deployment](docs/deployment.md)
+- [Authentication](docs/authentication.md)
+- [Payments](docs/payments.md)
+
+## Contributing
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Make and test your changes.
+4. Keep secrets out of commits.
+5. Open a pull request with a clear description.
 
 ## License
 
-ISC
+MIT License
+
+Copyright (c) 2026 Yashodip Deore
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+## Author
+
+**Yashodip Deore**
+
+GitHub: [@yashodipdeore2006](https://github.com/yashodipdeore2006)
